@@ -11,8 +11,8 @@
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <!-- Babel for JSX -->
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
-  <!-- docx for Word export (CDN mới) -->
-  <script src="https://cdn.jsdelivr.net/npm/docx@latest/build/index.min.js"></script>
+  <!-- html-docx-js for Word export -->
+  <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
   <!-- FileSaver for saving files -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 </head>
@@ -21,14 +21,6 @@
 
   <script type="text/babel">
     const { useState, useEffect } = React;
-
-    // Kiểm tra nếu docx có tồn tại
-    if (!window.docx) {
-      console.error("Thư viện docx không được tải. Vui lòng kiểm tra kết nối hoặc CDN.");
-      alert("Không thể tải thư viện docx. Vui lòng kiểm tra kết nối hoặc thử lại sau.");
-    }
-
-    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle } = window.docx || {};
 
     const App = () => {
       const [criteria, setCriteria] = useState([
@@ -59,106 +51,53 @@
       };
 
       const exportToWord = () => {
-        if (!window.docx) {
-          alert("Thư viện docx không được tải. Vui lòng kiểm tra kết nối hoặc thử lại sau.");
-          return;
-        }
-
         try {
-          const doc = new Document({
-            sections: [
-              {
-                properties: {},
-                children: [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: title,
-                        bold: true,
-                        size: 32,
-                      }),
-                    ],
-                    spacing: { after: 200 },
-                  }),
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: description,
-                        size: 24,
-                      }),
-                    ],
-                    spacing: { after: 400 },
-                  }),
-                  new Table({
-                    width: { size: 100, type: WidthType.PERCENTAGE },
-                    rows: [
-                      new TableRow({
-                        children: [
-                          new TableCell({
-                            children: [new Paragraph({ text: "Tiêu chí" })],
-                            borders: {
-                              top: { style: BorderStyle.SINGLE, size: 1 },
-                              bottom: { style: BorderStyle.SINGLE, size: 1 },
-                              left: { style: BorderStyle.SINGLE, size: 1 },
-                              right: { style: BorderStyle.SINGLE, size: 1 },
-                            },
-                          }),
-                          ...levelLabels.map((label) => (
-                            new TableCell({
-                              children: [new Paragraph({ text: label })],
-                              borders: {
-                                top: { style: BorderStyle.SINGLE, size: 1 },
-                                bottom: { style: BorderStyle.SINGLE, size: 1 },
-                                left: { style: BorderStyle.SINGLE, size: 1 },
-                                right: { style: BorderStyle.SINGLE, size: 1 },
-                              },
-                            })
-                          )),
-                        ],
-                      }),
-                      ...criteria.map((criterion) => (
-                        new TableRow({
-                          children: [
-                            new TableCell({
-                              children: [new Paragraph({ text: criterion.name })],
-                              borders: {
-                                top: { style: BorderStyle.SINGLE, size: 1 },
-                                bottom: { style: BorderStyle.SINGLE, size: 1 },
-                                left: { style: BorderStyle.SINGLE, size: 1 },
-                                right: { style: BorderStyle.SINGLE, size: 1 },
-                              },
-                            }),
-                            ...criterion.levels.map((level) => (
-                              new TableCell({
-                                children: [new Paragraph({ text: level })],
-                                borders: {
-                                  top: { style: BorderStyle.SINGLE, size: 1 },
-                                  bottom: { style: BorderStyle.SINGLE, size: 1 },
-                                  left: { style: BorderStyle.SINGLE, size: 1 },
-                                  right: { style: BorderStyle.SINGLE, size: 1 },
-                                },
-                              })
-                            )),
-                          ],
-                        })
-                      )),
-                    ],
-                  }),
-                ],
-              },
-            ],
-          });
+          // Tạo nội dung HTML cho file Word
+          let htmlContent = `
+            <html>
+              <head>
+                <meta charset="UTF-8">
+                <style>
+                  body { font-family: Arial, sans-serif; }
+                  h1 { font-size: 24px; font-weight: bold; }
+                  p { font-size: 16px; }
+                  table { width: 100%; border-collapse: collapse; }
+                  th, td { border: 1px solid black; padding: 8px; text-align: left; }
+                  th { background-color: #f2f2f2; }
+                </style>
+              </head>
+              <body>
+                <h1>${title}</h1>
+                <p>${description}</p>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Tiêu chí</th>
+                      ${levelLabels.map(label => `<th>${label}</th>`).join('')}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${criteria.map(criterion => `
+                      <tr>
+                        <td>${criterion.name}</td>
+                        ${criterion.levels.map(level => `<td>${level}</td>`).join('')}
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </body>
+            </html>
+          `;
 
-          Packer.toBlob(doc).then((blob) => {
-            saveAs(blob, "rubric.docx");
-            console.log("Tải file Word thành công!");
-          }).catch((error) => {
-            console.error("Lỗi khi tạo file Word:", error);
-            alert("Đã có lỗi xảy ra khi tạo file Word. Vui lòng kiểm tra console để biết thêm chi tiết.");
-          });
+          // Chuyển HTML thành file Word (docx) bằng html-docx-js
+          const converted = window.htmlDocx.asBlob(htmlContent);
+          
+          // Lưu file bằng FileSaver
+          saveAs(converted, "rubric.docx");
+          console.log("Tải file Word thành công!");
         } catch (error) {
           console.error("Lỗi trong hàm exportToWord:", error);
-          alert("Đã có lỗi xảy ra. Vui lòng kiểm tra console để biết thêm chi tiết.");
+          alert("Đã có lỗi xảy ra khi tạo file Word. Vui lòng kiểm tra console để biết thêm chi tiết.");
         }
       };
 
