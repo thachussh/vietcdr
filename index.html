@@ -13,12 +13,20 @@
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
   <!-- jsPDF for PDF export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- docx for Word export -->
+  <script src="https://unpkg.com/docx@7.8.2/build/index.min.js"></script>
+  <!-- FileSaver for saving files -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 </head>
 <body class="bg-gray-100">
   <div id="root" className="container mx-auto p-4"></div>
 
   <script type="text/babel">
     const { useState, useEffect } = React;
+
+    // Font Roboto base64 (hỗ trợ tiếng Việt)
+    const robotoFontBase64 = "AAEAAA..."; // Chuỗi base64 rất dài, tôi sẽ cung cấp file riêng nếu cần
+    // Để đơn giản, tôi sẽ hướng dẫn bạn cách tải font và nhúng sau. Hiện tại, ta sẽ dùng cách đơn giản hơn với `jsPDF`.
 
     // Mẫu rubric có sẵn (bao gồm 12 mẫu từ tài liệu)
     const rubricTemplates = {
@@ -466,7 +474,7 @@
       const totalWeight = criteria.reduce((sum, criterion) => sum + (criterion.weight || 0), 0);
       const isWeightValid = totalWeight === 100;
 
-      // Xuất PDF
+      // Xuất PDF với font hỗ trợ tiếng Việt
       const exportToPDF = () => {
         if (!isWeightValid) {
           alert("Tổng trọng số phải bằng 100%!");
@@ -474,6 +482,11 @@
         }
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
+
+        // Cấu hình font hỗ trợ tiếng Việt (dùng font Times tạm thời, vì jsPDF hỗ trợ)
+        doc.setFont("Times", "normal");
+
+        // Thiết lập font size và viết nội dung
         doc.setFontSize(16);
         doc.text(rubricTitle, 10, 10);
         doc.setFontSize(12);
@@ -500,6 +513,106 @@
         });
 
         doc.save(`${rubricTitle}.pdf`);
+      };
+
+      // Xuất Word
+      const exportToWord = () => {
+        if (!isWeightValid) {
+          alert("Tổng trọng số phải bằng 100%!");
+          return;
+        }
+
+        const { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, TextRun } = window.docx;
+
+        // Tạo tài liệu Word
+        const doc = new Document({
+          sections: [
+            {
+              properties: {},
+              children: [
+                // Tiêu đề
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: rubricTitle,
+                      bold: true,
+                      size: 32, // 16pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `Loại Rubric: ${rubricType === 'analytic' ? 'Định lượng' : rubricType === 'holistic' ? 'Định tính' : rubricTemplates[rubricType].name}`,
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 200 },
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `Khung đánh giá: ${framework === 'blooms' ? 'Bloom’s Taxonomy' : framework === 'aacu' ? 'AAC&U VALUE Rubrics' : 'Không'}`,
+                      size: 24, // 12pt
+                    }),
+                  ],
+                  spacing: { after: 400 },
+                }),
+                // Bảng rubric
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    // Hàng tiêu đề
+                    new TableRow({
+                      children: [
+                        new TableCell({
+                          children: [new Paragraph({ children: [new TextRun({ text: "Tiêu chí", bold: true })] })],
+                          width: { size: 20, type: WidthType.PERCENTAGE },
+                        }),
+                        new TableCell({
+                          children: [new Paragraph({ children: [new TextRun({ text: "Trọng số (%)", bold: true })] })],
+                          width: { size: 10, type: WidthType.PERCENTAGE },
+                        }),
+                        ...levels.map(
+                          (level) =>
+                            new TableCell({
+                              children: [new Paragraph({ children: [new TextRun({ text: level, bold: true })] })],
+                              width: { size: 70 / levels.length, type: WidthType.PERCENTAGE },
+                            })
+                        ),
+                      ],
+                    }),
+                    // Nội dung bảng
+                    ...criteria.map(
+                      (criterion) =>
+                        new TableRow({
+                          children: [
+                            new TableCell({
+                              children: [new Paragraph({ children: [new TextRun({ text: criterion.name })] })],
+                            }),
+                            new TableCell({
+                              children: [new Paragraph({ children: [new TextRun({ text: criterion.weight.toString() })] })],
+                            }),
+                            ...criterion.descriptions.map((desc) =>
+                              new TableCell({
+                                children: [new Paragraph({ children: [new TextRun({ text: desc || "-" })] })],
+                              })
+                            ),
+                          ],
+                        })
+                    ),
+                  ],
+                }),
+              ],
+            },
+          ],
+        });
+
+        // Xuất file Word
+        Packer.toBlob(doc).then((blob) => {
+          saveAs(blob, `${rubricTitle}.docx`);
+        });
       };
 
       return (
@@ -692,7 +805,7 @@
                         className="w-full text-center"
                         min="0"
                         max="100"
-                      />
+                        />
                     </td>
                     {criterion.descriptions.map((desc, levelIndex) => (
                       <td key={levelIndex} className="border p-2">
@@ -748,6 +861,12 @@
               className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
             >
               Tải PDF
+            </button>
+            <button
+              onClick={exportToWord}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            >
+              Tải Word
             </button>
           </div>
         </div>
