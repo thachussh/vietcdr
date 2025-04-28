@@ -11,10 +11,6 @@
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <!-- Babel for JSX -->
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
-  <!-- html-docx-js for Word export -->
-  <script src="https://unpkg.com/html-docx-js@0.3.1/dist/html-docx.js"></script>
-  <!-- FileSaver for saving files -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 </head>
 <body class="bg-gray-100">
   <div id="root" className="container mx-auto p-4"></div>
@@ -50,10 +46,9 @@
         setLevelLabels(newLabels);
       };
 
-      const exportToWord = () => {
+      const exportToHTML = () => {
         try {
-          // Tạo nội dung HTML cho file Word
-          let htmlContent = `
+          const htmlContent = `
             <html>
               <head>
                 <meta charset="UTF-8">
@@ -88,16 +83,60 @@
               </body>
             </html>
           `;
-
-          // Chuyển HTML thành file Word (docx) bằng html-docx-js
-          const converted = window.htmlDocx.asBlob(htmlContent);
-          
-          // Lưu file bằng FileSaver
-          saveAs(converted, "rubric.docx");
-          console.log("Tải file Word thành công!");
+          const blob = new Blob([htmlContent], { type: 'text/html' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'rubric.html';
+          a.click();
+          URL.revokeObjectURL(url);
+          console.log("Tải file HTML thành công!");
         } catch (error) {
-          console.error("Lỗi trong hàm exportToWord:", error);
-          alert("Đã có lỗi xảy ra khi tạo file Word. Vui lòng kiểm tra console để biết thêm chi tiết.");
+          console.error("Lỗi khi xuất file HTML:", error);
+          alert("Đã có lỗi xảy ra khi xuất file HTML. Vui lòng kiểm tra console để biết thêm chi tiết.");
+        }
+      };
+
+      const exportToTXT = () => {
+        try {
+          let txtContent = `${title}\n\n${description}\n\n`;
+          txtContent += `Tiêu chí\t${levelLabels.join('\t')}\n`;
+          criteria.forEach(criterion => {
+            txtContent += `${criterion.name}\t${criterion.levels.join('\t')}\n`;
+          });
+          const blob = new Blob([txtContent], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'rubric.txt';
+          a.click();
+          URL.revokeObjectURL(url);
+          console.log("Tải file TXT thành công!");
+        } catch (error) {
+          console.error("Lỗi khi xuất file TXT:", error);
+          alert("Đã có lỗi xảy ra khi xuất file TXT. Vui lòng kiểm tra console để biết thêm chi tiết.");
+        }
+      };
+
+      const exportToJSON = () => {
+        try {
+          const jsonContent = JSON.stringify({
+            title,
+            description,
+            levelLabels,
+            criteria
+          }, null, 2);
+          const blob = new Blob([jsonContent], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'rubric.json';
+          a.click();
+          URL.revokeObjectURL(url);
+          console.log("Tải file JSON thành công!");
+        } catch (error) {
+          console.error("Lỗi khi xuất file JSON:", error);
+          alert("Đã có lỗi xảy ra khi xuất file JSON. Vui lòng kiểm tra console để biết thêm chi tiết.");
         }
       };
 
@@ -173,12 +212,24 @@
             </button>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 space-x-2">
             <button
-              onClick={exportToWord}
+              onClick={exportToHTML}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Xuất HTML
+            </button>
+            <button
+              onClick={exportToTXT}
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             >
-              Xuất Word
+              Xuất TXT
+            </button>
+            <button
+              onClick={exportToJSON}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+            >
+              Xuất JSON
             </button>
           </div>
         </div>
