@@ -398,7 +398,14 @@
       const loadSavedRubric = (rubric) => {
         setRubricTitle(rubric.title);
         setRubricType(rubric.type);
-        setCriteria(rubric.criteria);
+        let loadedCriteria = rubric.criteria;
+        if (rubric.type === "holistic") {
+          loadedCriteria = rubric.criteria.map(criterion => ({
+            ...criterion,
+            scores: criterion.scores || levels.map((_, i) => levels.length - i - 1),
+          }));
+        }
+        setCriteria(loadedCriteria);
         setLevels(rubric.levels);
         if (rubric.type === "analytic" && rubric.criterionScores) {
           setCriterionScores(rubric.criterionScores);
@@ -411,7 +418,29 @@
       const loadTemplate = (type) => {
         setRubricType(type);
         setRubricTitle(rubricTemplates[type].name);
-        setCriteria(rubricTemplates[type].criteria);
+        let templateCriteria = rubricTemplates[type].criteria;
+        if (type !== "holistic" && rubricType === "holistic") {
+          // Nếu chuyển từ định tính sang định lượng, bỏ thuộc tính scores
+          templateCriteria = templateCriteria.map(criterion => {
+            const { scores, ...rest } = criterion;
+            return rest;
+          });
+        } else if (type !== "holistic" && rubricType !== "holistic") {
+          // Định lượng: không cần thay đổi
+        } else if (type === "holistic") {
+          // Định tính: đảm bảo có scores
+          templateCriteria = templateCriteria.map(criterion => ({
+            ...criterion,
+            scores: criterion.scores || rubricTemplates[type].levels.map((_, i) => rubricTemplates[type].levels.length - i - 1),
+          }));
+        } else {
+          // Chuyển từ định lượng sang định tính
+          templateCriteria = templateCriteria.map(criterion => ({
+            ...criterion,
+            scores: rubricTemplates[type].levels.map((_, i) => rubricTemplates[type].levels.length - i - 1),
+          }));
+        }
+        setCriteria(templateCriteria);
         setLevels(rubricTemplates[type].levels);
       };
 
@@ -471,6 +500,9 @@
       // Cập nhật thang điểm (định tính)
       const updateScore = (criterionIndex, levelIndex, value) => {
         const newCriteria = [...criteria];
+        if (!newCriteria[criterionIndex].scores) {
+          newCriteria[criterionIndex].scores = levels.map((_, i) => levels.length - i - 1);
+        }
         newCriteria[criterionIndex].scores[levelIndex] = parseFloat(value) || 0;
         setCriteria(newCriteria);
       };
@@ -540,7 +572,7 @@
 
         try {
           let htmlContent;
-          if (rubricType === "analytic") {
+          if (rubricType === "analytic" || (rubricType !== "holistic" && !criteria.some(criterion => criterion.scores))) {
             // Rubric định lượng
             htmlContent = `
               <html>
@@ -622,7 +654,7 @@
                         ${levels.map((level, levelIdx) => `
                           <tr>
                             <td>${level}</td>
-                            <td>${criterion.scores[levelIdx]}</td>
+                            <td>${criterion.scores && criterion.scores[levelIdx] !== undefined ? criterion.scores[levelIdx] : (levels.length - levelIdx - 1)}</td>
                             <td>${criterion.descriptions[levelIdx] || "-"}</td>
                             <td>${criterionIdx === 0 ? (levelScores[levelIdx] || "") : ""}</td>
                           </tr>
@@ -836,7 +868,7 @@
                           <td className="border p-2">
                             <input
                               type="number"
-                              value={criterion.scores ? criterion.scores[levelIdx] : levels.length - levelIdx - 1}
+                              value={criterion.scores ? criterion.scores[levelIdx] : (levels.length - levelIdx - 1)}
                               onChange={(e) => updateScore(criterionIdx, levelIdx, e.target.value)}
                               className="w-full text-center"
                               min="0"
