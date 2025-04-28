@@ -45,6 +45,7 @@
               "Thuyết trình trung bình, nội dung cơ bản, giao tiếp hạn chế",
               "Thuyết trình yếu, nội dung thiếu rõ ràng, không thu hút",
             ],
+            scores: [10, 7, 4, 0], // Thang điểm cho từng mức chất lượng
           },
         ],
         levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
@@ -357,12 +358,25 @@
       const [assignmentType, setAssignmentType] = useState("essay");
       const [framework, setFramework] = useState("none");
       const [savedRubrics, setSavedRubrics] = useState([]);
+      const [criterionScores, setCriterionScores] = useState([]); // Điểm cho từng tiêu chí (định lượng)
+      const [levelScores, setLevelScores] = useState([]); // Điểm thực tế cho từng mức (định tính)
 
       // Load saved rubrics from LocalStorage
       useEffect(() => {
         const storedRubrics = JSON.parse(localStorage.getItem("savedRubrics")) || [];
         setSavedRubrics(storedRubrics);
       }, []);
+
+      // Cập nhật điểm khi criteria hoặc levels thay đổi
+      useEffect(() => {
+        if (rubricType === "holistic") {
+          // Định tính: Điểm cho từng mức chất lượng
+          setLevelScores(levels.map(() => ""));
+        } else {
+          // Định lượng: Điểm cho từng tiêu chí
+          setCriterionScores(criteria.map(() => ""));
+        }
+      }, [criteria, levels, rubricType]);
 
       // Save rubric to LocalStorage
       const saveRubric = () => {
@@ -371,6 +385,8 @@
           type: rubricType,
           criteria,
           levels,
+          criterionScores: rubricType === "analytic" ? criterionScores : undefined,
+          levelScores: rubricType === "holistic" ? levelScores : undefined,
         };
         const updatedRubrics = [...savedRubrics, newRubric];
         setSavedRubrics(updatedRubrics);
@@ -384,6 +400,11 @@
         setRubricType(rubric.type);
         setCriteria(rubric.criteria);
         setLevels(rubric.levels);
+        if (rubric.type === "analytic" && rubric.criterionScores) {
+          setCriterionScores(rubric.criterionScores);
+        } else if (rubric.type === "holistic" && rubric.levelScores) {
+          setLevelScores(rubric.levelScores);
+        }
       };
 
       // Tải mẫu rubric
@@ -396,7 +417,10 @@
 
       // Thêm tiêu chí từ gợi ý
       const addSuggestedCriterion = (criterionName, descriptions = levels.map(() => ""), weight = 0) => {
-        setCriteria([...criteria, { name: criterionName, weight, descriptions }]);
+        const newCriterion = rubricType === "holistic"
+          ? { name: criterionName, weight: 100, descriptions, scores: levels.map((_, i) => levels.length - i - 1) }
+          : { name: criterionName, weight, descriptions };
+        setCriteria([...criteria, newCriterion]);
       };
 
       // Thêm tiêu chí từ Bloom’s Taxonomy
@@ -411,7 +435,10 @@
 
       // Thêm tiêu chí mới
       const addCriterion = () => {
-        setCriteria([...criteria, { name: `Tiêu chí ${criteria.length + 1}`, weight: 0, descriptions: levels.map(() => "") }]);
+        const newCriterion = rubricType === "holistic"
+          ? { name: `Tiêu chí ${criteria.length + 1}`, weight: 100, descriptions: levels.map(() => ""), scores: levels.map((_, i) => levels.length - i - 1) }
+          : { name: `Tiêu chí ${criteria.length + 1}`, weight: 0, descriptions: levels.map(() => "") };
+        setCriteria([...criteria, newCriterion]);
       };
 
       // Thêm mức độ mới
@@ -422,6 +449,7 @@
           criteria.map((criterion) => ({
             ...criterion,
             descriptions: [...criterion.descriptions, ""],
+            scores: rubricType === "holistic" ? [...(criterion.scores || []), levels.length] : criterion.scores,
           }))
         );
       };
@@ -440,9 +468,32 @@
         setCriteria(newCriteria);
       };
 
+      // Cập nhật thang điểm (định tính)
+      const updateScore = (criterionIndex, levelIndex, value) => {
+        const newCriteria = [...criteria];
+        newCriteria[criterionIndex].scores[levelIndex] = parseFloat(value) || 0;
+        setCriteria(newCriteria);
+      };
+
+      // Cập nhật điểm thực tế
+      const updateCriterionScore = (index, value) => {
+        const newScores = [...criterionScores];
+        newScores[index] = value;
+        setCriterionScores(newScores);
+      };
+
+      const updateLevelScore = (index, value) => {
+        const newScores = [...levelScores];
+        newScores[index] = value;
+        setLevelScores(newScores);
+      };
+
       // Xóa tiêu chí
       const removeCriterion = (index) => {
         setCriteria(criteria.filter((_, i) => i !== index));
+        if (rubricType === "analytic") {
+          setCriterionScores(criterionScores.filter((_, i) => i !== index));
+        }
       };
 
       // Xóa mức độ
@@ -452,8 +503,12 @@
           criteria.map((criterion) => ({
             ...criterion,
             descriptions: criterion.descriptions.filter((_, i) => i !== index),
+            scores: criterion.scores ? criterion.scores.filter((_, i) => i !== index) : criterion.scores,
           }))
         );
+        if (rubricType === "holistic") {
+          setLevelScores(levelScores.filter((_, i) => i !== index));
+        }
       };
 
       // Xóa tất cả
@@ -462,59 +517,123 @@
         setRubricType("analytic");
         setCriteria([]);
         setLevels([]);
+        setCriterionScores([]);
+        setLevelScores([]);
       };
 
-      // Kiểm tra tổng trọng số
+      // Kiểm tra tổng trọng số (cho định lượng)
       const totalWeight = criteria.reduce((sum, criterion) => sum + (criterion.weight || 0), 0);
-      const isWeightValid = totalWeight === 100;
+      const isWeightValid = rubricType === "analytic" ? totalWeight === 100 : true;
+
+      // Tính tổng điểm (cho định lượng)
+      const totalScore = criteria.reduce((sum, criterion, index) => {
+        const score = parseFloat(criterionScores[index]) || 0;
+        return sum + (score * criterion.weight) / 100;
+      }, 0);
 
       // Xuất Word
       const exportToWord = () => {
-        if (!isWeightValid) {
+        if (rubricType === "analytic" && !isWeightValid) {
           alert("Tổng trọng số phải bằng 100%!");
           return;
         }
 
         try {
-          // Tạo nội dung HTML cho file Word
-          let htmlContent = `
-            <html>
-              <head>
-                <meta charset="UTF-8">
-                <style>
-                  body { font-family: Arial, sans-serif; }
-                  h1 { font-size: 24px; font-weight: bold; }
-                  p { font-size: 16px; }
-                  table { width: 100%; border-collapse: collapse; }
-                  th, td { border: 1px solid black; padding: 8px; text-align: left; }
-                  th { background-color: #f2f2f2; }
-                </style>
-              </head>
-              <body>
-                <h1>${rubricTitle}</h1>
-                <p>Loại Rubric: ${rubricType === 'analytic' ? 'Định lượng' : rubricType === 'holistic' ? 'Định tính' : rubricTemplates[rubricType].name}</p>
-                <p>Khung đánh giá: ${framework === 'blooms' ? 'Bloom’s Taxonomy' : framework === 'aacu' ? 'AAC&U VALUE Rubrics' : 'Không'}</p>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Tiêu chí</th>
-                      <th>Trọng số (%)</th>
-                      ${levels.map(level => `<th>${level}</th>`).join('')}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${criteria.map(criterion => `
+          let htmlContent;
+          if (rubricType === "analytic") {
+            // Rubric định lượng
+            htmlContent = `
+              <html>
+                <head>
+                  <meta charset="UTF-8">
+                  <style>
+                    body { font-family: Arial, sans-serif; }
+                    h1 { font-size: 24px; font-weight: bold; }
+                    p { font-size: 16px; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border: 1px solid black; padding: 8px; text-align: left; }
+                    th { background-color: #f2f2f2; }
+                    .total-row { font-weight: bold; }
+                  </style>
+                </head>
+                <body>
+                  <h1>${rubricTitle}</h1>
+                  <p>Loại Rubric: ${rubricType === 'analytic' ? 'Định lượng' : rubricType === 'holistic' ? 'Định tính' : rubricTemplates[rubricType].name}</p>
+                  <p>Khung đánh giá: ${framework === 'blooms' ? 'Bloom’s Taxonomy' : framework === 'aacu' ? 'AAC&U VALUE Rubrics' : 'Không'}</p>
+                  <table>
+                    <thead>
                       <tr>
-                        <td>${criterion.name}</td>
-                        <td>${criterion.weight}</td>
-                        ${criterion.descriptions.map(desc => `<td>${desc || "-"}</td>`).join('')}
+                        <th>Tiêu chí</th>
+                        <th>Trọng số (%)</th>
+                        ${levels.map(level => `<th>${level}</th>`).join('')}
+                        <th>Điểm</th>
                       </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
-              </body>
-            </html>
-          `;
+                    </thead>
+                    <tbody>
+                      ${criteria.map((criterion, idx) => `
+                        <tr>
+                          <td>${criterion.name}</td>
+                          <td>${criterion.weight}</td>
+                          ${criterion.descriptions.map(desc => `<td>${desc || "-"}</td>`).join('')}
+                          <td>${criterionScores[idx] || ""}</td>
+                        </tr>
+                      `).join('')}
+                      <tr class="total-row">
+                        <td colspan="${levels.length + 2}">Tổng điểm (Tính bằng: SUM(Điểm x Trọng số / 100))</td>
+                        <td>${totalScore || ""}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p>Lưu ý: Để tính tổng điểm, nhập điểm cho từng tiêu chí (thang điểm tùy chọn, ví dụ 0-10), sau đó tính tổng theo công thức: Tổng điểm = SUM(Điểm x Trọng số / 100).</p>
+                </body>
+              </html>
+            `;
+          } else {
+            // Rubric định tính
+            htmlContent = `
+              <html>
+                <head>
+                  <meta charset="UTF-8">
+                  <style>
+                    body { font-family: Arial, sans-serif; }
+                    h1 { font-size: 24px; font-weight: bold; }
+                    p { font-size: 16px; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { border: 1px solid black; padding: 8px; text-align: left; }
+                    th { background-color: #f2f2f2; }
+                  </style>
+                </head>
+                <body>
+                  <h1>${rubricTitle}</h1>
+                  <p>Loại Rubric: ${rubricType === 'analytic' ? 'Định lượng' : rubricType === 'holistic' ? 'Định tính' : rubricTemplates[rubricType].name}</p>
+                  <p>Khung đánh giá: ${framework === 'blooms' ? 'Bloom’s Taxonomy' : framework === 'aacu' ? 'AAC&U VALUE Rubrics' : 'Không'}</p>
+                  ${criteria.map((criterion, criterionIdx) => `
+                    <p>Tiêu chí: ${criterion.name}</p>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Mức chất lượng</th>
+                          <th>Thang điểm</th>
+                          <th>Mô tả mức chất lượng</th>
+                          <th>Điểm</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${levels.map((level, levelIdx) => `
+                          <tr>
+                            <td>${level}</td>
+                            <td>${criterion.scores[levelIdx]}</td>
+                            <td>${criterion.descriptions[levelIdx] || "-"}</td>
+                            <td>${criterionIdx === 0 ? (levelScores[levelIdx] || "") : ""}</td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  `).join('')}
+                </body>
+              </html>
+            `;
+          }
 
           // Chuyển HTML thành file Word (docx) bằng html-docx-js
           const converted = window.htmlDocx.asBlob(htmlContent);
@@ -666,82 +785,185 @@
 
           {/* Bảng rubric */}
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  <th className="border p-2">Tiêu chí</th>
-                  <th className="border p-2">Trọng số (%)</th>
-                  {levels.map((level, index) => (
-                    <th key={index} className="border p-2">
-                      <input
-                        type="text"
-                        value={level}
-                        onChange={(e) => {
-                          const newLevels = [...levels];
-                          newLevels[index] = e.target.value;
-                          setLevels(newLevels);
-                        }}
-                        className="w-full text-center"
-                      />
-                      <button
-                        onClick={() => removeLevel(index)}
-                        className="text-red-500 text-sm mt-1"
-                      >
-                        Xóa
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {criteria.map((criterion, criterionIndex) => (
-                  <tr key={criterionIndex}>
-                    <td className="border p-2">
-                      <input
-                        type="text"
-                        value={criterion.name}
-                        onChange={(e) => updateCriterion(criterionIndex, "name", e.target.value)}
-                        className="w-full"
-                      />
-                      <button
-                        onClick={() => removeCriterion(criterionIndex)}
-                        className="text-red-500 text-sm mt-1"
-                      >
-                        Xóa
-                      </button>
-                    </td>
-                    <td className="border p-2">
-                      <input
-                        type="number"
-                        value={criterion.weight}
-                        onChange={(e) => updateCriterion(criterionIndex, "weight", e.target.value)}
-                        className="w-full text-center"
-                        min="0"
-                        max="100"
-                      />
-                    </td>
-                    {criterion.descriptions.map((desc, levelIndex) => (
-                      <td key={levelIndex} className="border p-2">
-                        <textarea
-                          value={desc}
-                          onChange={(e) => updateDescription(criterionIndex, levelIndex, e.target.value)}
-                          className="w-full h-20 resize-none"
-                          placeholder="Nhập mô tả..."
+            {rubricType === "holistic" ? (
+              // Rubric định tính
+              criteria.map((criterion, criterionIdx) => (
+                <div key={criterionIdx} className="mb-6">
+                  <div className="flex items-center mb-2">
+                    <input
+                      type="text"
+                      value={criterion.name}
+                      onChange={(e) => updateCriterion(criterionIdx, "name", e.target.value)}
+                      className="w-1/2 border rounded-md p-2 mr-2"
+                    />
+                    <button
+                      onClick={() => removeCriterion(criterionIdx)}
+                      className="text-red-500 text-sm"
+                    >
+                      Xóa Tiêu chí
+                    </button>
+                  </div>
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="border p-2">Mức chất lượng</th>
+                        <th className="border p-2">Thang điểm</th>
+                        <th className="border p-2">Mô tả mức chất lượng</th>
+                        <th className="border p-2">Điểm</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {levels.map((level, levelIdx) => (
+                        <tr key={levelIdx}>
+                          <td className="border p-2">
+                            <input
+                              type="text"
+                              value={level}
+                              onChange={(e) => {
+                                const newLevels = [...levels];
+                                newLevels[levelIdx] = e.target.value;
+                                setLevels(newLevels);
+                              }}
+                              className="w-full text-center"
+                            />
+                            <button
+                              onClick={() => removeLevel(levelIdx)}
+                              className="text-red-500 text-sm mt-1"
+                            >
+                              Xóa
+                            </button>
+                          </td>
+                          <td className="border p-2">
+                            <input
+                              type="number"
+                              value={criterion.scores ? criterion.scores[levelIdx] : levels.length - levelIdx - 1}
+                              onChange={(e) => updateScore(criterionIdx, levelIdx, e.target.value)}
+                              className="w-full text-center"
+                              min="0"
+                            />
+                          </td>
+                          <td className="border p-2">
+                            <textarea
+                              value={criterion.descriptions[levelIdx]}
+                              onChange={(e) => updateDescription(criterionIdx, levelIdx, e.target.value)}
+                              className="w-full h-20 resize-none"
+                              placeholder="Nhập mô tả..."
+                            />
+                          </td>
+                          <td className="border p-2">
+                            {criterionIdx === 0 && (
+                              <input
+                                type="number"
+                                value={levelScores[levelIdx]}
+                                onChange={(e) => updateLevelScore(levelIdx, e.target.value)}
+                                className="w-full text-center"
+                                placeholder="Nhập điểm..."
+                                min="0"
+                              />
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))
+            ) : (
+              // Rubric định lượng
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr>
+                    <th className="border p-2">Tiêu chí</th>
+                    <th className="border p-2">Trọng số (%)</th>
+                    {levels.map((level, index) => (
+                      <th key={index} className="border p-2">
+                        <input
+                          type="text"
+                          value={level}
+                          onChange={(e) => {
+                            const newLevels = [...levels];
+                            newLevels[index] = e.target.value;
+                            setLevels(newLevels);
+                          }}
+                          className="w-full text-center"
+                        />
+                        <button
+                          onClick={() => removeLevel(index)}
+                          className="text-red-500 text-sm mt-1"
+                        >
+                          Xóa
+                        </button>
+                      </th>
+                    ))}
+                    <th className="border p-2">Điểm</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {criteria.map((criterion, criterionIndex) => (
+                    <tr key={criterionIndex}>
+                      <td className="border p-2">
+                        <input
+                          type="text"
+                          value={criterion.name}
+                          onChange={(e) => updateCriterion(criterionIndex, "name", e.target.value)}
+                          className="w-full"
+                        />
+                        <button
+                          onClick={() => removeCriterion(criterionIndex)}
+                          className="text-red-500 text-sm mt-1"
+                        >
+                          Xóa
+                        </button>
+                      </td>
+                      <td className="border p-2">
+                        <input
+                          type="number"
+                          value={criterion.weight}
+                          onChange={(e) => updateCriterion(criterionIndex, "weight", e.target.value)}
+                          className="w-full text-center"
+                          min="0"
+                          max="100"
                         />
                       </td>
-                    ))}
+                      {criterion.descriptions.map((desc, levelIndex) => (
+                        <td key={levelIndex} className="border p-2">
+                          <textarea
+                            value={desc}
+                            onChange={(e) => updateDescription(criterionIndex, levelIndex, e.target.value)}
+                            className="w-full h-20 resize-none"
+                            placeholder="Nhập mô tả..."
+                          />
+                        </td>
+                      ))}
+                      <td className="border p-2">
+                        <input
+                          type="number"
+                          value={criterionScores[criterionIndex]}
+                          onChange={(e) => updateCriterionScore(criterionIndex, e.target.value)}
+                          className="w-full text-center"
+                          placeholder="Nhập điểm..."
+                          min="0"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="font-bold">
+                    <td colSpan={levels.length + 2} className="border p-2 text-right">Tổng điểm:</td>
+                    <td className="border p-2">{totalScore || ""}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            )}
           </div>
 
-          {/* Hiển thị tổng trọng số */}
-          <div className="mt-2">
-            <p className={`text-sm ${isWeightValid ? "text-green-500" : "text-red-500"}`}>
-              Tổng trọng số: {totalWeight}% {isWeightValid ? "(Hợp lệ)" : "(Phải bằng 100%)"}
-            </p>
-          </div>
+          {/* Hiển thị tổng trọng số (cho định lượng) */}
+          {rubricType === "analytic" && (
+            <div className="mt-2">
+              <p className={`text-sm ${isWeightValid ? "text-green-500" : "text-red-500"}`}>
+                Tổng trọng số: {totalWeight}% {isWeightValid ? "(Hợp lệ)" : "(Phải bằng 100%)"}
+              </p>
+            </div>
+          )}
 
           {/* Nút hành động */}
           <div className="mt-4 flex space-x-4">
