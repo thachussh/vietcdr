@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Công cụ Tạo Rubric</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <!-- Babel for JSX -->
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.6/babel.min.js"></script>
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div id="root" className="container mx-auto p-4"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Mẫu rubric có sẵn (bao gồm 12 mẫu từ tài liệu)
+    const rubricTemplates = {
+      analytic: {
+        name: "Rubric Phân Tích (Bài Luận)",
+        criteria: [
+          { name: "Lập luận", weight: 40, descriptions: ["Lập luận chặt chẽ, logic", "Lập luận rõ ràng, có dẫn chứng", "Lập luận cơ bản, thiếu dẫn chứng", "Lập luận yếu, không rõ ràng"] },
+          { name: "Dẫn chứng", weight: 30, descriptions: ["Dẫn chứng phong phú, phù hợp", "Dẫn chứng đủ, nhưng chưa đa dạng", "Dẫn chứng hạn chế", "Không có dẫn chứng"] },
+          { name: "Ngôn ngữ", weight: 30, descriptions: ["Ngôn ngữ chính xác, sáng tạo", "Ngôn ngữ đúng, nhưng đơn giản", "Ngôn ngữ có lỗi nhỏ", "Ngôn ngữ nhiều lỗi"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      holistic: {
+        name: "Rubric Toàn Diện (Thuyết Trình)",
+        criteria: [
+          {
+            name: "Hiệu quả tổng thể",
+            weight: 100,
+            descriptions: [
+              "Thuyết trình xuất sắc, nội dung rõ ràng, giao tiếp tự tin, thu hút khán giả",
+              "Thuyết trình tốt, nội dung khá, giao tiếp ổn, khán giả quan tâm",
+              "Thuyết trình trung bình, nội dung cơ bản, giao tiếp hạn chế",
+              "Thuyết trình yếu, nội dung thiếu rõ ràng, không thu hút",
+            ],
+          },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C1: {
+        name: "Rubric Đánh Giá Chuyên Cần",
+        criteria: [
+          { name: "Tần suất tham gia", weight: 50, descriptions: ["Tham gia đầy đủ, đúng giờ", "Tham gia hầu hết, đôi khi trễ", "Tham gia không đều", "Thường xuyên vắng mặt"] },
+          { name: "Tích cực học tập", weight: 50, descriptions: ["Tích cực đặt câu hỏi, thảo luận", "Tham gia thảo luận khi được yêu cầu", "Tham gia hạn chế", "Không tham gia"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C2: {
+        name: "Rubric Đánh Giá Báo Cáo Sản Phẩm Làm Việc Nhóm",
+        criteria: [
+          { name: "Nội dung báo cáo", weight: 40, descriptions: ["Nội dung rõ ràng, logic, đầy đủ", "Nội dung khá, có cấu trúc", "Nội dung cơ bản, thiếu chi tiết", "Nội dung yếu, không rõ ràng"] },
+          { name: "Hợp tác nhóm", weight: 30, descriptions: ["Hợp tác xuất sắc, phân công rõ ràng", "Hợp tác tốt, có phối hợp", "Hợp tác hạn chế", "Thiếu hợp tác"] },
+          { name: "Trình bày", weight: 30, descriptions: ["Trình bày chuyên nghiệp, thu hút", "Trình bày rõ ràng, ổn", "Trình bày cơ bản", "Trình bày yếu"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C3: {
+        name: "Rubric Đánh Giá Tiểu Luận Cá Nhân",
+        criteria: [
+          { name: "Tư duy phản biện", weight: 40, descriptions: ["Phân tích sâu sắc, lập luận chặt chẽ", "Phân tích rõ ràng, có căn cứ", "Phân tích cơ bản, chưa mạnh", "Phân tích yếu, thiếu lập luận"] },
+          { name: "Cấu trúc bài viết", weight: 30, descriptions: ["Cấu trúc logic, rõ ràng", "Cấu trúc khá, dễ theo dõi", "Cấu trúc cơ bản, hơi rối", "Cấu trúc yếu, không rõ"] },
+          { name: "Ngôn ngữ", weight: 30, descriptions: ["Ngôn ngữ chính xác, sáng tạo", "Ngôn ngữ đúng, nhưng đơn giản", "Ngôn ngữ có lỗi nhỏ", "Ngôn ngữ nhiều lỗi"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C4: {
+        name: "Rubric Đánh Giá Bài Tập Lớn/Đồ Án Cá Nhân",
+        criteria: [
+          { name: "Ý tưởng", weight: 30, descriptions: ["Ý tưởng sáng tạo, độc đáo", "Ý tưởng tốt, khả thi", "Ý tưởng cơ bản", "Ý tưởng không rõ ràng"] },
+          { name: "Thực hiện", weight: 40, descriptions: ["Thực hiện xuất sắc, đúng tiến độ", "Thực hiện tốt, đạt yêu cầu", "Thực hiện cơ bản, chậm tiến độ", "Thực hiện yếu, không đạt"] },
+          { name: "Kết quả", weight: 30, descriptions: ["Kết quả vượt mong đợi", "Kết quả đạt yêu cầu", "Kết quả cơ bản", "Kết quả không đạt"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C5: {
+        name: "Rubric Đánh Giá Bài Thực Hành Cá Nhân Tại Phòng Thí Nghiệm",
+        criteria: [
+          { name: "Chuẩn bị lý thuyết", weight: 30, descriptions: ["Trả lời đầy đủ, đúng các câu hỏi", "Trả lời đúng trên 70% câu hỏi", "Trả lời đúng trên 50% câu hỏi", "Trả lời dưới 50% câu hỏi"] },
+          { name: "Thao tác thí nghiệm", weight: 40, descriptions: ["Thực hiện đúng quy trình, an toàn", "Thực hiện đúng, nhưng chưa tối ưu", "Thực hiện cơ bản, có lỗi nhỏ", "Thực hiện sai quy trình"] },
+          { name: "Kết quả thí nghiệm", weight: 30, descriptions: ["Kết quả đúng, trả lời đầy đủ", "Kết quả đúng, trả lời khá", "Kết quả đúng một phần", "Kết quả sai"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C6: {
+        name: "Rubric Đánh Giá Thi Vấn Đáp",
+        criteria: [
+          { name: "Kiến thức", weight: 60, descriptions: ["Trả lời chính xác, sâu sắc", "Trả lời đúng, khá đầy đủ", "Trả lời cơ bản, thiếu chi tiết", "Trả lời sai hoặc không trả lời"] },
+          { name: "Giao tiếp", weight: 40, descriptions: ["Trình bày tự tin, rõ ràng", "Trình bày rõ, nhưng chưa tự tin", "Trình bày cơ bản, ngập ngừng", "Trình bày yếu, không rõ"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C7: {
+        name: "Rubric Đánh Giá Kỹ Năng Thực Hành",
+        criteria: [
+          { name: "Kỹ năng thao tác", weight: 60, descriptions: ["Thao tác thành thạo, chính xác", "Thao tác đúng, nhưng chưa mượt", "Thao tác cơ bản, có lỗi", "Thao tác sai, không đạt"] },
+          { name: "An toàn lao động", weight: 40, descriptions: ["Tuân thủ đầy đủ quy định an toàn", "Tuân thủ khá, nhưng có sơ suất nhỏ", "Tuân thủ cơ bản", "Không tuân thủ an toàn"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C8: {
+        name: "Rubric Đánh Giá Thực Tập Tại Doanh Nghiệp",
+        criteria: [
+          { name: "Thái độ làm việc", weight: 30, descriptions: ["Tích cực, chuyên nghiệp, đúng giờ", "Tích cực, nhưng có sai sót nhỏ", "Thái độ cơ bản, thiếu chủ động", "Thái độ kém, không chuyên nghiệp"] },
+          { name: "Kỹ năng thực hành", weight: 40, descriptions: ["Áp dụng kỹ năng xuất sắc", "Áp dụng kỹ năng tốt", "Áp dụng kỹ năng cơ bản", "Kỹ năng yếu, không đạt"] },
+          { name: "Kết quả công việc", weight: 30, descriptions: ["Kết quả vượt yêu cầu", "Kết quả đạt yêu cầu", "Kết quả cơ bản", "Kết quả không đạt"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C9: {
+        name: "Rubric Đánh Giá Báo Cáo Thực Tập Tại Doanh Nghiệp",
+        criteria: [
+          { name: "Nội dung báo cáo", weight: 40, descriptions: ["Nội dung chi tiết, logic", "Nội dung khá, có cấu trúc", "Nội dung cơ bản, thiếu chi tiết", "Nội dung yếu, không rõ"] },
+          { name: "Phân tích", weight: 30, descriptions: ["Phân tích sâu sắc, có căn cứ", "Phân tích khá, nhưng chưa đầy đủ", "Phân tích cơ bản", "Phân tích yếu"] },
+          { name: "Trình bày", weight: 30, descriptions: ["Trình bày chuyên nghiệp", "Trình bày rõ ràng", "Trình bày cơ bản", "Trình bày yếu"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C10: {
+        name: "Rubric Đánh Giá Khóa Luận/Luận Văn Tốt Nghiệp (Hội Đồng)",
+        criteria: [
+          { name: "Nội dung nghiên cứu", weight: 40, descriptions: ["Nội dung sâu sắc, đóng góp mới", "Nội dung khá, có giá trị", "Nội dung cơ bản, ít sáng tạo", "Nội dung yếu, thiếu chiều sâu"] },
+          { name: "Phương pháp", weight: 30, descriptions: ["Phương pháp phù hợp, chặt chẽ", "Phương pháp khá, có căn cứ", "Phương pháp cơ bản, thiếu chi tiết", "Phương pháp không phù hợp"] },
+          { name: "Trình bày", weight: 30, descriptions: ["Trình bày logic, chuyên nghiệp", "Trình bày rõ ràng, ổn", "Trình bày cơ bản", "Trình bày yếu"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C11: {
+        name: "Rubric Đánh Giá Khóa Luận/Luận Văn Tốt Nghiệp",
+        criteria: [
+          { name: "Ý nghĩa khoa học", weight: 40, descriptions: ["Ý nghĩa cao, đóng góp rõ ràng", "Ý nghĩa khá, có giá trị", "Ý nghĩa cơ bản", "Ý nghĩa thấp, không rõ"] },
+          { name: "Tính sáng tạo", weight: 30, descriptions: ["Sáng tạo độc đáo", "Sáng tạo tốt", "Sáng tạo cơ bản", "Không có sáng tạo"] },
+          { name: "Trình bày", weight: 30, descriptions: ["Trình bày chuyên nghiệp", "Trình bày rõ ràng", "Trình bày cơ bản", "Trình bày yếu"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+      C12: {
+        name: "Rubric Đánh Giá Kết Quả Đạt Chuẩn Đầu Ra Học Phần/CTĐT",
+        criteria: [
+          { name: "Kiến thức", weight: 40, descriptions: ["Nắm vững, áp dụng xuất sắc", "Nắm khá, áp dụng tốt", "Nắm cơ bản, áp dụng hạn chế", "Kiến thức yếu, không áp dụng được"] },
+          { name: "Kỹ năng", weight: 30, descriptions: ["Kỹ năng thành thạo", "Kỹ năng khá", "Kỹ năng cơ bản", "Kỹ năng yếu"] },
+          { name: "Thái độ", weight: 30, descriptions: ["Tích cực, chủ động", "Tích cực, nhưng chưa nổi bật", "Thái độ cơ bản", "Thái độ kém"] },
+        ],
+        levels: ["Xuất sắc", "Tốt", "Đạt yêu cầu", "Chưa đạt"],
+      },
+    };
+
+    // Gợi ý tiêu chí theo loại bài tập
+    const suggestedCriteria = {
+      essay: ["Lập luận", "Dẫn chứng", "Ngôn ngữ", "Cấu trúc bài", "Tư duy phản biện"],
+      presentation: ["Nội dung", "Kỹ năng giao tiếp", "Hình ảnh hỗ trợ", "Tương tác khán giả"],
+      project: ["Ý tưởng", "Hợp tác nhóm", "Kết quả", "Quản lý thời gian"],
+      lab: ["Chuẩn bị lý thuyết", "Thao tác thí nghiệm", "Kết quả thí nghiệm"],
+      internship: ["Thái độ làm việc", "Kỹ năng thực hành", "Kết quả công việc"],
+      thesis: ["Nội dung nghiên cứu", "Phương pháp", "Ý nghĩa khoa học", "Tính sáng tạo"],
+    };
+
+    // Bloom’s Taxonomy gợi ý
+    const bloomsTaxonomy = {
+      remember: {
+        name: "Nhớ",
+        verbs: ["Liệt kê", "Mô tả", "Nhận diện", "Ghi nhớ"],
+        descriptions: ["Liệt kê chính xác và đầy đủ", "Liệt kê đúng nhưng thiếu chi tiết", "Liệt kê một phần", "Không liệt kê được"],
+      },
+      understand: {
+        name: "Hiểu",
+        verbs: ["Giải thích", "Tóm tắt", "Diễn giải", "So sánh"],
+        descriptions: ["Giải thích rõ ràng, đúng trọng tâm", "Giải thích đúng nhưng đơn giản", "Giải thích thiếu chính xác", "Không giải thích được"],
+      },
+      apply: {
+        name: "Áp dụng",
+        verbs: ["Áp dụng", "Sử dụng", "Thực hiện", "Chứng minh"],
+        descriptions: ["Áp dụng chính xác, hiệu quả", "Áp dụng đúng nhưng chưa tối ưu", "Áp dụng hạn chế", "Không áp dụng được"],
+      },
+      analyze: {
+        name: "Phân tích",
+        verbs: ["Phân tích", "Phân loại", "So sánh", "Đánh giá"],
+        descriptions: ["Phân tích sâu sắc, logic", "Phân tích đúng nhưng chưa đầy đủ", "Phân tích cơ bản", "Phân tích yếu"],
+      },
+      evaluate: {
+        name: "Đánh giá",
+        verbs: ["Đánh giá", "Phê bình", "Biện minh", "Kết luận"],
+        descriptions: ["Đánh giá sâu sắc, có căn cứ", "Đánh giá hợp lý nhưng thiếu chiều sâu", "Đánh giá cơ bản", "Không đánh giá được"],
+      },
+      create: {
+        name: "Sáng tạo",
+        verbs: ["Thiết kế", "Sáng tạo", "Phát triển", "Xây dựng"],
+        descriptions: ["Sáng tạo độc đáo, hiệu quả", "Sáng tạo tốt nhưng chưa nổi bật", "Sáng tạo cơ bản", "Không sáng tạo"],
+      },
+    };
+
+    // AAC&U VALUE Rubrics (16 mẫu)
+    const aacuValueRubrics = {
+      civicEngagement: {
+        name: "Tham gia công dân—Địa phương và Toàn cầu",
+        descriptions: [
+          "Hiểu sâu sắc và tham gia tích cực, tạo tác động lớn",
+          "Hiểu khá, tham gia khá, có đóng góp tích cực",
+          "Hiểu cơ bản, tham gia hạn chế, tác động nhỏ",
+          "Hiểu yếu, không tham gia, không có tác động",
+        ],
+      },
+      creativeThinking: {
+        name: "Tư duy sáng tạo",
+        descriptions: [
+          "Ý tưởng độc đáo, sáng tạo vượt trội",
+          "Ý tưởng mới, sáng tạo tốt",
+          "Ý tưởng cơ bản, sáng tạo hạn chế",
+          "Ý tưởng không mới, thiếu sáng tạo",
+        ],
+      },
+      criticalThinking: {
+        name: "Tư duy phản biện",
+        descriptions: [
+          "Phân tích vấn đề sâu sắc, lập luận chặt chẽ, kết luận thuyết phục",
+          "Phân tích rõ ràng, lập luận có căn cứ, kết luận hợp lý",
+          "Phân tích cơ bản, lập luận chưa mạnh, kết luận đơn giản",
+          "Phân tích yếu, thiếu lập luận, kết luận không rõ",
+        ],
+      },
+      ethicalReasoning: {
+        name: "Lập luận đạo đức",
+        descriptions: [
+          "Nhận diện và lập luận đạo đức sâu sắc",
+          "Nhận diện và lập luận đạo đức rõ ràng",
+          "Nhận diện cơ bản, lập luận đơn giản",
+          "Nhận diện yếu, lập luận không rõ",
+        ],
+      },
+      lifelongLearning: {
+        name: "Nền tảng và Kỹ năng Học tập Suốt đời",
+        descriptions: [
+          "Tự định hướng xuất sắc, ứng dụng kiến thức sáng tạo",
+          "Tự định hướng khá, ứng dụng kiến thức tốt",
+          "Tự định hướng cơ bản, ứng dụng hạn chế",
+          "Không tự định hướng, không ứng dụng được",
+        ],
+      },
+      globalLearning: {
+        name: "Học tập toàn cầu",
+        descriptions: [
+          "Hiểu sâu các vấn đề toàn cầu, giải pháp sáng tạo",
+          "Hiểu khá, giải pháp hợp lý",
+          "Hiểu cơ bản, giải pháp đơn giản",
+          "Hiểu yếu, không có giải pháp",
+        ],
+      },
+      informationLiteracy: {
+        name: "Hiểu biết thông tin",
+        descriptions: [
+          "Xác định và sử dụng thông tin một cách hiệu quả",
+          "Xác định và sử dụng thông tin khá",
+          "Xác định và sử dụng thông tin cơ bản",
+          "Không xác định hoặc sử dụng được thông tin",
+        ],
+      },
+      inquiryAndAnalysis: {
+        name: "Tìm hiểu và Phân tích",
+        descriptions: [
+          "Nghiên cứu sâu, phân tích logic, kết luận thuyết phục",
+          "Nghiên cứu khá, phân tích rõ ràng, kết luận hợp lý",
+          "Nghiên cứu cơ bản, phân tích đơn giản",
+          "Nghiên cứu yếu, phân tích thiếu rõ ràng",
+        ],
+      },
+      integrativeLearning: {
+        name: "Học tập tích hợp",
+        descriptions: [
+          "Kết nối ý tưởng xuất sắc, ứng dụng sáng tạo",
+          "Kết nối ý tưởng tốt, ứng dụng khá",
+          "Kết nối ý tưởng cơ bản, ứng dụng hạn chế",
+          "Kết nối yếu, không ứng dụng được",
+        ],
+      },
+      interculturalKnowledge: {
+        name: "Hiểu biết và Năng lực Liên văn hóa",
+        descriptions: [
+          "Hiểu sâu sắc văn hóa, tương tác xuất sắc",
+          "Hiểu khá, tương tác tốt",
+          "Hiểu cơ bản, tương tác hạn chế",
+          "Hiểu yếu, thiếu tương tác",
+        ],
+      },
+      oralCommunication: {
+        name: "Giao tiếp bằng lời nói",
+        descriptions: [
+          "Trình bày tự tin, rõ ràng, thu hút khán giả",
+          "Trình bày ổn, nội dung khá, khán giả quan tâm",
+          "Trình bày cơ bản, thiếu tương tác",
+          "Trình bày yếu, không thu hút",
+        ],
+      },
+      problemSolving: {
+        name: "Giải quyết vấn đề",
+        descriptions: [
+          "Xác định và giải quyết vấn đề một cách sáng tạo",
+          "Xác định và giải quyết vấn đề khá",
+          "Xác định và giải quyết vấn đề cơ bản",
+          "Không xác định hoặc giải quyết được vấn đề",
+        ],
+      },
+      quantitativeLiteracy: {
+        name: "Hiểu biết định lượng",
+        descriptions: [
+          "Hiểu và ứng dụng dữ liệu số một cách hiệu quả",
+          "Hiểu và ứng dụng dữ liệu số khá",
+          "Hiểu và ứng dụng dữ liệu số cơ bản",
+          "Không hiểu hoặc ứng dụng được dữ liệu số",
+        ],
+      },
+      reading: {
+        name: "Kỹ năng đọc",
+        descriptions: [
+          "Hiểu và phân tích văn bản một cách sâu sắc",
+          "Hiểu và phân tích văn bản khá",
+          "Hiểu và phân tích văn bản cơ bản",
+          "Không hiểu hoặc phân tích được văn bản",
+        ],
+      },
+      teamwork: {
+        name: "Làm việc nhóm",
+        descriptions: [
+          "Hợp tác xuất sắc, đóng góp tích cực",
+          "Hợp tác khá, có đóng góp",
+          "Hợp tác cơ bản, đóng góp hạn chế",
+          "Thiếu hợp tác, không đóng góp",
+        ],
+      },
+      writtenCommunication: {
+        name: "Giao tiếp bằng văn bản",
+        descriptions: [
+          "Ngôn ngữ chính xác, cấu trúc rõ ràng, ý tưởng sáng tạo",
+          "Ngôn ngữ đúng, cấu trúc ổn, ý tưởng khá",
+          "Ngôn ngữ có lỗi nhỏ, cấu trúc cơ bản",
+          "Ngôn ngữ nhiều lỗi, cấu trúc yếu",
+        ],
+      },
+    };
+
+    const App = () => {
+      // State để quản lý rubric
+      const [rubricType, setRubricType] = useState("analytic");
+      const [rubricTitle, setRubricTitle] = useState("Rubric Đánh Giá");
+      const [criteria, setCriteria] = useState(rubricTemplates.analytic.criteria);
+      const [levels, setLevels] = useState(rubricTemplates.analytic.levels);
+      const [assignmentType, setAssignmentType] = useState("essay");
+      const [framework, setFramework] = useState("none");
+      const [savedRubrics, setSavedRubrics] = useState([]);
+
+      // Load saved rubrics from LocalStorage
+      useEffect(() => {
+        const storedRubrics = JSON.parse(localStorage.getItem("savedRubrics")) || [];
+        setSavedRubrics(storedRubrics);
+      }, []);
+
+      // Save rubric to LocalStorage
+      const saveRubric = () => {
+        const newRubric = {
+          title: rubricTitle,
+          type: rubricType,
+          criteria,
+          levels,
+        };
+        const updatedRubrics = [...savedRubrics, newRubric];
+        setSavedRubrics(updatedRubrics);
+        localStorage.setItem("savedRubrics", JSON.stringify(updatedRubrics));
+        alert("Rubric đã được lưu!");
+      };
+
+      // Load a saved rubric
+      const loadSavedRubric = (rubric) => {
+        setRubricTitle(rubric.title);
+        setRubricType(rubric.type);
+        setCriteria(rubric.criteria);
+        setLevels(rubric.levels);
+      };
+
+      // Tải mẫu rubric
+      const loadTemplate = (type) => {
+        setRubricType(type);
+        setRubricTitle(rubricTemplates[type].name);
+        setCriteria(rubricTemplates[type].criteria);
+        setLevels(rubricTemplates[type].levels);
+      };
+
+      // Thêm tiêu chí từ gợi ý
+      const addSuggestedCriterion = (criterionName, descriptions = levels.map(() => ""), weight = 0) => {
+        setCriteria([...criteria, { name: criterionName, weight, descriptions }]);
+      };
+
+      // Thêm tiêu chí từ Bloom’s Taxonomy
+      const addBloomsCriterion = (key) => {
+        addSuggestedCriterion(bloomsTaxonomy[key].name, bloomsTaxonomy[key].descriptions);
+      };
+
+      // Thêm tiêu chí từ AAC&U
+      const addAacuCriterion = (key) => {
+        addSuggestedCriterion(aacuValueRubrics[key].name, aacuValueRubrics[key].descriptions);
+      };
+
+      // Thêm tiêu chí mới
+      const addCriterion = () => {
+        setCriteria([...criteria, { name: `Tiêu chí ${criteria.length + 1}`, weight: 0, descriptions: levels.map(() => "") }]);
+      };
+
+      // Thêm mức độ mới
+      const addLevel = () => {
+        const newLevel = `Mức ${levels.length + 1}`;
+        setLevels([...levels, newLevel]);
+        setCriteria(
+          criteria.map((criterion) => ({
+            ...criterion,
+            descriptions: [...criterion.descriptions, ""],
+          }))
+        );
+      };
+
+      // Cập nhật tiêu chí
+      const updateCriterion = (index, field, value) => {
+        const newCriteria = [...criteria];
+        newCriteria[index][field] = field === "weight" ? parseFloat(value) : value;
+        setCriteria(newCriteria);
+      };
+
+      // Cập nhật mô tả
+      const updateDescription = (criterionIndex, levelIndex, value) => {
+        const newCriteria = [...criteria];
+        newCriteria[criterionIndex].descriptions[levelIndex] = value;
+        setCriteria(newCriteria);
+      };
+
+      // Xóa tiêu chí
+      const removeCriterion = (index) => {
+        setCriteria(criteria.filter((_, i) => i !== index));
+      };
+
+      // Xóa mức độ
+      const removeLevel = (index) => {
+        setLevels(levels.filter((_, i) => i !== index));
+        setCriteria(
+          criteria.map((criterion) => ({
+            ...criterion,
+            descriptions: criterion.descriptions.filter((_, i) => i !== index),
+          }))
+        );
+      };
+
+      // Xóa tất cả
+      const clearAll = () => {
+        setRubricTitle("Rubric Đánh Giá");
+        setRubricType("analytic");
+        setCriteria([]);
+        setLevels([]);
+      };
+
+      // Kiểm tra tổng trọng số
+      const totalWeight = criteria.reduce((sum, criterion) => sum + (criterion.weight || 0), 0);
+      const isWeightValid = totalWeight === 100;
+
+      // Xuất PDF
+      const exportToPDF = () => {
+        if (!isWeightValid) {
+          alert("Tổng trọng số phải bằng 100%!");
+          return;
+        }
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text(rubricTitle, 10, 10);
+        doc.setFontSize(12);
+        doc.text(`Loại Rubric: ${rubricType === 'analytic' ? 'Định lượng' : rubricType === 'holistic' ? 'Định tính' : rubricTemplates[rubricType].name}`, 10, 20);
+        doc.text(`Khung đánh giá: ${framework === 'blooms' ? 'Bloom’s Taxonomy' : framework === 'aacu' ? 'AAC&U VALUE Rubrics' : 'Không'}`, 10, 30);
+
+        let y = 40;
+        // Tiêu đề bảng
+        doc.text("Tiêu chí", 10, y);
+        doc.text("Trọng số (%)", 50, y);
+        levels.forEach((level, index) => {
+          doc.text(level, 80 + index * 40, y);
+        });
+        y += 10;
+
+        // Nội dung bảng
+        criteria.forEach((criterion) => {
+          doc.text(criterion.name, 10, y);
+          doc.text(criterion.weight.toString(), 50, y);
+          criterion.descriptions.forEach((desc, index) => {
+            doc.text(desc || "-", 80 + index * 40, y);
+          });
+          y += 10;
+        });
+
+        doc.save(`${rubricTitle}.pdf`);
+      };
+
+      return (
+        <div className="max-w-5xl mx-auto bg-white p-6 rounded-lg shadow-md">
+          <h1 className="text-2xl font-bold mb-4 text-center">Công cụ Tạo Rubric</h1>
+
+          {/* Tiêu đề và loại rubric */}
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium">Tiêu đề Rubric</label>
+              <input
+                type="text"
+                value={rubricTitle}
+                onChange={(e) => setRubricTitle(e.target.value)}
+                className="mt-1 block w-full border rounded-md p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Loại Rubric</label>
+              <select
+                value={rubricType}
+                onChange={(e) => loadTemplate(e.target.value)}
+                className="mt-1 block w-full border rounded-md p-2"
+              >
+                <option value="analytic">Định lượng</option>
+                <option value="holistic">Định tính</option>
+                <option value="C1">Chuyên cần (C1)</option>
+                <option value="C2">Báo cáo nhóm (C2)</option>
+                <option value="C3">Tiểu luận cá nhân (C3)</option>
+                <option value="C4">Bài tập lớn/Đồ án (C4)</option>
+                <option value="C5">Thực hành thí nghiệm (C5)</option>
+                <option value="C6">Thi vấn đáp (C6)</option>
+                <option value="C7">Kỹ năng thực hành (C7)</option>
+                <option value="C8">Thực tập doanh nghiệp (C8)</option>
+                <option value="C9">Báo cáo thực tập (C9)</option>
+                <option value="C10">Khóa luận (Hội đồng) (C10)</option>
+                <option value="C11">Khóa luận (C11)</option>
+                <option value="C12">Chuẩn đầu ra học phần (C12)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Khung đánh giá</label>
+              <select
+                value={framework}
+                onChange={(e) => setFramework(e.target.value)}
+                className="mt-1 block w-full border rounded-md p-2"
+              >
+                <option value="none">Không</option>
+                <option value="blooms">Bloom’s Taxonomy</option>
+                <option value="aacu">AAC&U VALUE Rubrics</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Danh sách rubric đã lưu */}
+          {savedRubrics.length > 0 && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium">Tải Rubric đã lưu</label>
+              <select
+                onChange={(e) => {
+                  const rubric = savedRubrics[e.target.value];
+                  if (rubric) loadSavedRubric(rubric);
+                }}
+                className="mt-1 block w-full border rounded-md p-2"
+              >
+                <option value="">Chọn rubric...</option>
+                {savedRubrics.map((rubric, index) => (
+                  <option key={index} value={index}>
+                    {rubric.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Gợi ý tiêu chí */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium">Loại bài tập</label>
+            <select
+              value={assignmentType}
+              onChange={(e) => setAssignmentType(e.target.value)}
+              className="mt-1 block w-full border rounded-md p-2"
+            >
+              <option value="essay">Bài luận</option>
+              <option value="presentation">Thuyết trình</option>
+              <option value="project">Dự án nhóm</option>
+              <option value="lab">Thực hành thí nghiệm</option>
+              <option value="internship">Thực tập doanh nghiệp</option>
+              <option value="thesis">Khóa luận/Luận văn</option>
+            </select>
+            <div className="mt-2">
+              <p className="text-sm font-medium">Gợi ý tiêu chí:</p>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {suggestedCriteria[assignmentType].map((criterion, index) => (
+                  <button
+                    key={index}
+                    onClick={() => addSuggestedCriterion(criterion)}
+                    className="bg-gray-200 text-sm px-3 py-1 rounded hover:bg-gray-300"
+                  >
+                    {criterion}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {framework === "blooms" && (
+              <div className="mt-4">
+                <p className="text-sm font-medium">Gợi ý từ Bloom’s Taxonomy:</p>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {Object.keys(bloomsTaxonomy).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => addBloomsCriterion(key)}
+                      className="bg-blue-200 text-sm px-3 py-1 rounded hover:bg-blue-300"
+                    >
+                      {bloomsTaxonomy[key].name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {framework === "aacu" && (
+              <div className="mt-4">
+                <p className="text-sm font-medium">Gợi ý từ AAC&U VALUE Rubrics:</p>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {Object.keys(aacuValueRubrics).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => addAacuCriterion(key)}
+                      className="bg-green-200 text-sm px-3 py-1 rounded hover:bg-green-300"
+                    >
+                      {aacuValueRubrics[key].name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bảng rubric */}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th className="border p-2">Tiêu chí</th>
+                  <th className="border p-2">Trọng số (%)</th>
+                  {levels.map((level, index) => (
+                    <th key={index} className="border p-2">
+                      <input
+                        type="text"
+                        value={level}
+                        onChange={(e) => {
+                          const newLevels = [...levels];
+                          newLevels[index] = e.target.value;
+                          setLevels(newLevels);
+                        }}
+                        className="w-full text-center"
+                      />
+                      <button
+                        onClick={() => removeLevel(index)}
+                        className="text-red-500 text-sm mt-1"
+                      >
+                        Xóa
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {criteria.map((criterion, criterionIndex) => (
+                  <tr key={criterionIndex}>
+                    <td className="border p-2">
+                      <input
+                        type="text"
+                        value={criterion.name}
+                        onChange={(e) => updateCriterion(criterionIndex, "name", e.target.value)}
+                        className="w-full"
+                      />
+                      <button
+                        onClick={() => removeCriterion(criterionIndex)}
+                        className="text-red-500 text-sm mt-1"
+                      >
+                        Xóa
+                      </button>
+                    </td>
+                    <td className="border p-2">
+                      <input
+                        type="number"
+                        value={criterion.weight}
+                        onChange={(e) => updateCriterion(criterionIndex, "weight", e.target.value)}
+                        className="w-full text-center"
+                        min="0"
+                        max="100"
+                      />
+                    </td>
+                    {criterion.descriptions.map((desc, levelIndex) => (
+                      <td key={levelIndex} className="border p-2">
+                        <textarea
+                          value={desc}
+                          onChange={(e) => updateDescription(criterionIndex, levelIndex, e.target.value)}
+                          className="w-full h-20 resize-none"
+                          placeholder="Nhập mô tả..."
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Hiển thị tổng trọng số */}
+          <div className="mt-2">
+            <p className={`text-sm ${isWeightValid ? "text-green-500" : "text-red-500"}`}>
+              Tổng trọng số: {totalWeight}% {isWeightValid ? "(Hợp lệ)" : "(Phải bằng 100%)"}
+            </p>
+          </div>
+
+          {/* Nút hành động */}
+          <div className="mt-4 flex space-x-4">
+            <button
+              onClick={addCriterion}
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            >
+              Thêm Tiêu chí
+            </button>
+            <button
+              onClick={addLevel}
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            >
+              Thêm Mức độ
+            </button>
+            <button
+              onClick={clearAll}
+              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+            >
+              Xóa Tất Cả
+            </button>
+            <button
+              onClick={saveRubric}
+              className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600"
+            >
+              Lưu Rubric
+            </button>
+            <button
+              onClick={exportToPDF}
+              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+            >
+              Tải PDF
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // Render ứng dụng
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
